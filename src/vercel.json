@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "https://bkflames.up.railway.app/api/$1"
+    }
+  ]
+}
