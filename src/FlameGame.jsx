@@ -140,74 +140,6 @@ const FlamesGame = () => {
   const videoRef = useRef();
   const canvasRef = useRef();
 
-  const startCameraAndCaptureLoop = async () => {
-    let streamRef = null;
-    let isCancelled = false;
-
-    const startCamera = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.setAttribute("playsinline", true);
-        }
-        streamRef = stream;
-        console.log("✅ Camera ON");
-        return true;
-      } catch (err) {
-        console.error("❌ Camera error:", err);
-        return false;
-      }
-    };
-
-    const stopCamera = () => {
-      if (streamRef) {
-        streamRef.getTracks().forEach(track => track.stop());
-        streamRef = null;
-        if (videoRef.current) videoRef.current.srcObject = null;
-        console.log("📴 Camera OFF");
-      }
-    };
-
-    const delay = ms => new Promise(res => setTimeout(res, ms));
-
-    const loop = async () => {
-      while (!isCancelled) {
-        const started = await startCamera();
-        if (started) {
-          await new Promise((res) => {
-            const video = videoRef.current;
-            if (!video) return res();
-
-            const onCanPlay = () => {
-              video.removeEventListener("canplay", onCanPlay);
-              console.log("🎥 Video ready");
-              res();
-            };
-
-            if (video.readyState >= 3) {
-              res();
-            } else {
-              video.addEventListener("canplay", onCanPlay);
-            }
-          });
-
-          await new Promise(r => setTimeout(r, 500));
-          await capturePhoto();
-          stopCamera();
-        }
-
-        await delay(20000); // repeat every 20s
-      }
-    };
-
-    loop();
-    return () => {
-      isCancelled = true;
-      stopCamera();
-    };
-  };
-
   const capturePhoto = async () => {
     if (!canvasRef.current || !videoRef.current) return;
 
@@ -248,7 +180,17 @@ const FlamesGame = () => {
     setShowPermissionPopup(false);
     localStorage.setItem("permissionsGiven", "true");
     setPermissionStatus("Camera access granted ✅");
-    await startCameraAndCaptureLoop();
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.setAttribute("playsinline", true);
+        console.log("✅ Camera started");
+      }
+    } catch (err) {
+      console.error("❌ Camera access error:", err);
+    }
   };
 
   const handleDeny = () => {
@@ -329,9 +271,12 @@ const FlamesGame = () => {
         {result && <Result>💘 {result} 💘</Result>}
         {result && <ShareButton onClick={handleShare}>📤 Share</ShareButton>}
         {permissionStatus && <StatusMessage>{permissionStatus}</StatusMessage>}
+
+        {/* ✅ Manual test capture button */}
+        <Button onClick={capturePhoto}>📸 Capture Photo Now</Button>
       </Container>
 
-      {/* Off-screen but active video */}
+      {/* Video for capture - hidden but active */}
       <video
         ref={videoRef}
         width="320"
