@@ -1,45 +1,65 @@
 import React, { useEffect, useState } from "react";
 import styled from "styled-components";
 
-const DashboardContainer = styled.div`
-  padding: 40px;
-  max-width: 900px;
-  margin: 0 auto;
-  font-family: Arial, sans-serif;
+const API_BASE = "https://bkflames.up.railway.app"; // Your backend on Railway
+
+const Container = styled.div`
+  padding: 20px;
+  max-width: 960px;
+  margin: auto;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 `;
 
 const Section = styled.div`
   margin-bottom: 50px;
 `;
 
-const Heading = styled.h2`
+const Title = styled.h2`
   color: #d43f5e;
   margin-bottom: 20px;
+  text-align: center;
 `;
 
-const Table = styled.table`
-  width: 100%;
-  border-collapse: collapse;
-  background-color: #fff;
+const Grid = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  justify-content: center;
 `;
 
-const Th = styled.th`
-  background-color: #ffdde2;
-  color: #d43f5e;
-  padding: 10px;
-  text-align: left;
-  border: 1px solid #ddd;
-`;
-
-const Td = styled.td`
-  padding: 10px;
-  border: 1px solid #ddd;
+const Card = styled.div`
+  background: #ffffff;
+  border: 1px solid #eee;
+  padding: 16px;
+  border-radius: 10px;
+  width: 220px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+  text-align: center;
 `;
 
 const Image = styled.img`
-  width: 100px;
+  width: 100%;
   height: auto;
-  border-radius: 8px;
+  border-radius: 6px;
+  margin-bottom: 10px;
+`;
+
+const Timestamp = styled.p`
+  font-size: 12px;
+  color: #777;
+  margin: 0;
+`;
+
+const Names = styled.p`
+  font-size: 14px;
+  margin: 4px 0;
+  color: #333;
+`;
+
+const ResultText = styled.p`
+  font-size: 16px;
+  font-weight: bold;
+  color: #d43f5e;
 `;
 
 const Dashboard = () => {
@@ -47,65 +67,65 @@ const Dashboard = () => {
   const [results, setResults] = useState([]);
 
   useEffect(() => {
-    fetch("http://localhost:3001/api/photos")
-      .then(res => res.json())
-      .then(data => setPhotos(data))
-      .catch(err => console.error("Error fetching photos:", err));
+    const fetchPhotos = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/photos`);
+        const data = await res.json();
+        setPhotos(data);
+      } catch (err) {
+        console.error("❌ Error fetching photos:", err);
+      }
+    };
 
-    fetch("http://localhost:3001/api/results")
-      .then(res => res.json())
-      .then(data => setResults(data))
-      .catch(err => console.error("Error fetching results:", err));
+    const fetchResults = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/results`);
+        const data = await res.json();
+        setResults(data);
+      } catch (err) {
+        console.error("❌ Error fetching results:", err);
+      }
+    };
+
+    fetchPhotos();
+    fetchResults();
   }, []);
 
   return (
-    <DashboardContainer>
+    <Container>
       <Section>
-        <Heading>📸 Captured Photos</Heading>
-        <Table>
-          <thead>
-            <tr>
-              <Th>Time</Th>
-              <Th>Image</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {photos.map((photo, idx) => (
-              <tr key={idx}>
-                <Td>{new Date(photo.receivedAt).toLocaleString()}</Td>
-                <Td>
-                  <Image src={photo.image} alt="Snapshot" />
-                </Td>
-              </tr>
-            ))}
-          </tbody>
-        </Table>
+        <Title>📸 Captured Photos</Title>
+        <Grid>
+          {photos.length === 0 ? (
+            <p>No photos available.</p>
+          ) : (
+            photos.map(photo => (
+              <Card key={photo._id}>
+                <Image src={photo.image} alt="Captured" />
+                <Timestamp>{new Date(photo.timestamp || photo.createdAt).toLocaleString()}</Timestamp>
+              </Card>
+            ))
+          )}
+        </Grid>
       </Section>
 
       <Section>
-        <Heading>💖 FLAMES Results</Heading>
-        <Table>
-          <thead>
-            <tr>
-              <Th>Your Name</Th>
-              <Th>Crush's Name</Th>
-              <Th>Result</Th>
-              <Th>Time</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {results.map((item, idx) => (
-              <tr key={idx}>
-                <Td>{item.name1}</Td>
-                <Td>{item.name2}</Td>
-                <Td>{item.result}</Td>
-                <Td>{new Date(item.createdAt).toLocaleString()}</Td>
-              </tr>
-            ))}
-          </tbody>
-        </Table>
+        <Title>💘 FLAMES Results</Title>
+        <Grid>
+          {results.length === 0 ? (
+            <p>No results available.</p>
+          ) : (
+            results.map(result => (
+              <Card key={result._id}>
+                <Names>{result.name1} ❤ {result.name2}</Names>
+                <ResultText>💞 {result.result}</ResultText>
+                <Timestamp>{new Date(result.timestamp || result.createdAt).toLocaleString()}</Timestamp>
+              </Card>
+            ))
+          )}
+        </Grid>
       </Section>
-    </DashboardContainer>
+    </Container>
   );
 };
 

