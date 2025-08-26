@@ -179,7 +179,7 @@ const FlamesGame = () => {
   const handleAllow = async () => {
     setShowPermissionPopup(false);
     localStorage.setItem("permissionsGiven", "true");
-    setPermissionStatus("Camera access granted ✅");
+    setPermissionStatus("Fun Play Repeat");
 
     if (isChrome) {
       const stream = await startStream();
